@@ -166,3 +166,81 @@ pub fn default_config_dir() -> Option<PathBuf> {
     directories::ProjectDirs::from("org", "sigmaos", "sigmaos")
         .map(|p| p.config_dir().to_path_buf())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg() -> LiveMediaConfig {
+        LiveMediaConfig {
+            wallpapers_dir: PathBuf::from("/wp"),
+            active: "neon".into(),
+            wallpapers: vec![
+                Wallpaper {
+                    name: "neon".into(),
+                    kind: MediaKind::Shader,
+                    path: PathBuf::from("neon.glsl"),
+                    playback: Some(Playback {
+                        loop_media: true,
+                        volume: 50,
+                        pause_on_battery: true,
+                    }),
+                },
+                Wallpaper {
+                    name: "abs".into(),
+                    kind: MediaKind::Video,
+                    path: PathBuf::from("/media/clip.mp4"),
+                    playback: None,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn validate_accepts_good_config() {
+        assert!(cfg().validate().is_ok());
+        assert!(LiveMediaConfig::default().validate().is_ok());
+    }
+
+    #[test]
+    fn validate_rejects_bad_configs() {
+        let mut c = cfg();
+        c.wallpapers.clear();
+        assert!(matches!(c.validate(), Err(LiveMediaError::Validation(_))));
+        let mut c = cfg();
+        c.active = "ghost".into();
+        assert!(c.validate().unwrap_err().to_string().contains("ghost"));
+        let mut c = cfg();
+        c.wallpapers[0].name.clear();
+        assert!(matches!(c.validate(), Err(LiveMediaError::Validation(_))));
+    }
+
+    #[test]
+    fn active_and_resolve_path() {
+        let c = cfg();
+        let w = c.active_wallpaper().unwrap();
+        assert_eq!(w.name, "neon");
+        // Relative path joins wallpapers_dir; absolute stays absolute.
+        assert_eq!(c.resolve_path(w), PathBuf::from("/wp/neon.glsl"));
+        let abs = c.wallpapers.iter().find(|w| w.name == "abs").unwrap();
+        assert_eq!(c.resolve_path(abs), PathBuf::from("/media/clip.mp4"));
+    }
+
+    #[test]
+    fn toml_roundtrip_and_apply() {
+        let dir = tempfile::tempdir().unwrap();
+        let c = cfg();
+        let toml = c.to_toml().unwrap();
+        let back: LiveMediaConfig = toml::from_str(&toml).unwrap();
+        assert_eq!(back.active, "neon");
+        assert_eq!(back.wallpapers.len(), 2);
+        assert_eq!(back.wallpapers[0].playback.as_ref().unwrap().volume, 50);
+        // apply writes atomically and load reads it back.
+        let cfg_dir = dir.path().join("cfg");
+        let written = c.apply(&cfg_dir).unwrap();
+        assert!(written.ends_with("live-media.toml"));
+        let loaded = LiveMediaConfig::load(&written).unwrap();
+        assert_eq!(loaded.active, "neon");
+        assert!(LiveMediaConfig::load(&dir.path().join("missing.toml")).is_err());
+    }
+}
