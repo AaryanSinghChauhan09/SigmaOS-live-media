@@ -45,8 +45,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Validate { file } => {
             let cfg = load(file)?;
             let w = cfg.active_wallpaper().unwrap();
-            println!("valid: active='{}' kind={:?} path={}",
-                cfg.active, w.kind, cfg.resolve_path(w).display());
+            println!(
+                "valid: active='{}' kind={:?} path={}",
+                cfg.active,
+                w.kind,
+                cfg.resolve_path(w).display()
+            );
         }
         Commands::List { file } => {
             let cfg = load(file)?;

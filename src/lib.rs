@@ -91,13 +91,12 @@ impl LiveMediaConfig {
     /// Validate configuration.
     pub fn validate(&self) -> Result<(), LiveMediaError> {
         if self.wallpapers.is_empty() {
-            return Err(LiveMediaError::Validation(
-                "no wallpapers defined".into(),
-            ));
+            return Err(LiveMediaError::Validation("no wallpapers defined".into()));
         }
         if !self.wallpapers.iter().any(|w| w.name == self.active) {
             return Err(LiveMediaError::Validation(format!(
-                "active wallpaper '{}' not found", self.active
+                "active wallpaper '{}' not found",
+                self.active
             )));
         }
         for w in &self.wallpapers {
@@ -129,8 +128,20 @@ impl LiveMediaConfig {
         Ok(toml::to_string(self)?)
     }
 
-    /// Default config.
-    pub fn default() -> Self {
+    /// Apply: write config atomically to config dir.
+    pub fn apply(&self, config_dir: &Path) -> Result<PathBuf, LiveMediaError> {
+        self.validate()?;
+        std::fs::create_dir_all(config_dir)?;
+        let path = config_dir.join("live-media.toml");
+        let tmp = config_dir.join("live-media.toml.tmp");
+        std::fs::write(&tmp, self.to_toml()?)?;
+        std::fs::rename(&tmp, &path)?;
+        Ok(path)
+    }
+}
+
+impl Default for LiveMediaConfig {
+    fn default() -> Self {
         Self {
             wallpapers_dir: PathBuf::from("~/.local/share/sigmaos/wallpapers"),
             active: "default".into(),
@@ -141,17 +152,6 @@ impl LiveMediaConfig {
                 playback: None,
             }],
         }
-    }
-
-    /// Apply: write config atomically to config dir.
-    pub fn apply(&self, config_dir: &Path) -> Result<PathBuf, LiveMediaError> {
-        self.validate()?;
-        std::fs::create_dir_all(config_dir)?;
-        let path = config_dir.join("live-media.toml");
-        let tmp = config_dir.join("live-media.toml.tmp");
-        std::fs::write(&tmp, self.to_toml()?)?;
-        std::fs::rename(&tmp, &path)?;
-        Ok(path)
     }
 }
 
